@@ -13,6 +13,7 @@ class KDBConfig(BaseSettings):
 
     class Config:
         env_prefix = 'KDBX_'
+        frozen = True
 
 class ServerConfig(BaseSettings):
     server_name: str = "KDB-X_Demo"

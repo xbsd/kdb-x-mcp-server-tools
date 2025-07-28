@@ -5,10 +5,12 @@ import logging
 import argparse
 import socket
 from typing import Optional
+
+import pykx as kx
+from pykx.exceptions import QError
 from mcp.server.fastmcp import FastMCP
 from mcp_server.utils.logging import setup_logging
 from mcp_server.settings import ServerConfig, KDBConfig
-from mcp_server.resources.kdbx_database_tables import kdbx_describe_tables_impl
 
 try:
     from tools import register_tools
@@ -96,8 +98,6 @@ class McpServer:
     def _check_kdb_connection(self):
         """Check if KDB-X service is reachable and accessible."""
         try:
-            import pykx as kx
-
             conn = kx.SyncQConnection(
                 host=self.kdbx_config.host,
                 port=self.kdbx_config.port,
@@ -106,19 +106,24 @@ class McpServer:
                 timeout=5
             )
             self.logger.info(f"KDB-X connectivity check: SUCCESS - {self.kdbx_config.host}:{self.kdbx_config.port} is accessible")
-            # check if sql interface is loaded on KDBX service
-            if conn('not `e in key .s').py():
-                self.logger.error("KDB-X service does not have the SQL interface loaded which is required by the SQL query tool and resources. Load it using .s.init[]")
+
+            # check if sql interface is loaded on KDB-X service
+            if not conn('@[{2< count .s};(::);{0b}]').py():
+                self.logger.error("KDB-X SQL interface check: FAILED - KDB-X service does not have the SQL interface loaded. Load it by running .s.init[] in your KDB-X Session")
                 sys.exit(1)
             else:
                 self.logger.info("KDB-X SQL interface check: SUCCESS - SQL interface is loaded")
             conn.close()
 
-        except Exception as e:
+        except QError as e:
             self.logger.error(f"KDB-X connectivity check: FAILED - {self.kdbx_config.host}:{self.kdbx_config.port} ({e})")
-            self.logger.error("Troubleshooting steps:")
-            self.logger.error("  - Verify KDB-X service is running and accessible")
-            self.logger.error("  - Verify KDBX_USERNAME & KDBX_PASSWORD environment variables are correct")
+
+            if "Connection refused" in str(e):
+                self.logger.error(f"Verify KDB-X service is running and accessible on {self.kdbx_config.host}:{self.kdbx_config.port}")
+
+            if "invalid username/password" in str(e):
+                self.logger.error("Verify your KDBX_USERNAME and KDBX_PASSWORD are correct")
+
             self.logger.error("KDB-X MCP server cannot function without connection to a KDB-X database. Exiting...")
             sys.exit(1)
 
@@ -173,6 +178,14 @@ class McpServer:
             self.logger.info("Server stopped")
 
 
+config: MCPServerConfig | None = None
+
+def initialize_config(args):
+    global config
+    config = MCPServerConfig(kdbx_mcp_transport=args.kdbx_mcp_transport, kdbx_mcp_port=args.kdbx_mcp_port,
+                            kdbx_host=args.kdbx_host, kdbx_port=args.kdbx_port,
+                            kdbx_timeout=args.kdbx_timeout, kdbx_retry=args.kdbx_retry)
+
 def parse_args():
     """Parse command line arguments for the MCP server."""
     parser = argparse.ArgumentParser(description='KDB-X MCP Server')
@@ -206,16 +219,14 @@ def main():
     args = parse_args()
 
      # Determine transport mode (only set if CLI flag is provided)
-    kdbx_mcp_transport = None
+    args.kdbx_mcp_transport = None
     if args.streamable_http:
-        kdbx_mcp_transport = 'streamable-http'
+        args.kdbx_mcp_transport = 'streamable-http'
     elif args.stdio:
-        kdbx_mcp_transport = 'stdio'
+        args.kdbx_mcp_transport = 'stdio'
 
     # Create config with CLI overrides
-    config = MCPServerConfig(kdbx_mcp_transport=kdbx_mcp_transport, kdbx_mcp_port=args.kdbx_mcp_port,
-                            kdbx_host=args.kdbx_host, kdbx_port=args.kdbx_port,
-                            kdbx_timeout=args.kdbx_timeout, kdbx_retry=args.kdbx_retry)
+    initialize_config(args)
 
     # Setup logging with configured level
     setup_logging(config.log_level)
