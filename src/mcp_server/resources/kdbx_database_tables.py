@@ -3,6 +3,7 @@ import logging
 from typing import List
 from mcp.types import TextContent
 from mcp_server.utils.kdbx import get_kdb_connection
+from mcp_server.server import config
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ async def kdbx_describe_table_impl(table: str) -> List[TextContent]:
         List[TextContent]: Table description with metadata and sample data
     """
     try:
-        conn = get_kdb_connection()
+        conn = get_kdb_connection(config.kdbx_config)
 
         total_records = conn('{count get x}', table).py()
 
@@ -61,7 +62,7 @@ async def kdbx_describe_table_impl(table: str) -> List[TextContent]:
 
 async def kdbx_describe_tables_impl() -> List[TextContent]:
     try:
-        conn = get_kdb_connection()
+        conn = get_kdb_connection(config.kdbx_config)
 
         available_tables = conn.tables(None).py()
 

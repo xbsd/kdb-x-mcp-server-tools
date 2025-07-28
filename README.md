@@ -8,35 +8,108 @@ The server leverages a combination of curated resources, intelligent prompts, an
 
 ## Table of Contents
 
+- [Supported Environments](#supported-environments)
 - [Prerequisites](#prerequisites)
+- [Quickstart](#quickstart)
 - [Features](#features)
 - [KDB-X Setup](#kdb-x-setup)
 - [MCP Server Installation](#mcp-server-installation)
 - [Transport Options](#transport-options)
 - [Command line Parameters](#command-line-parameters)
 - [Usage with Claude Desktop](#usage-with-claude-desktop)
-- [Quickstart](#quickstart)
 - [Prompts/Resources/Tools](#promptsresourcestools)
 - [Development](#development)
 - [Troubleshooting](#troubleshooting)
+- [Useful Resources](#useful-resources)
+
+## Supported Environments
+
+The following table shows the install options for supported Operating Systems:
+
+| **Primary OS** | **KDB-X** | **KDB+** | **MCP Server** | **UV/NPX** | **Claude Desktop** | **Alternative MCP Client** |
+|--------|-------------|-------------|------------------------|------------|-------------------|-----------|
+| **Mac** | ✅ Local | ✅ Local | ✅ Local | ✅ Local | ✅ Local (streamable-http/stdio) | ✅ [Other clients](https://modelcontextprotocol.io/clients) |
+| **Linux** | ✅ Local | ✅ Local | ✅ Local | ✅ Local | ❌ Not supported | ✅ [Other clients](https://modelcontextprotocol.io/clients) |
+| **WSL** | ✅ Local | ✅ Local | ✅ Local | ✅ Local | ❌ Not supported | ✅ [Other clients](https://modelcontextprotocol.io/clients) |
+| **Windows** | ⚠️ WSL | ✅ Local | ⚠️ WSL | ✅ Local | ✅ Local (streamable-http only) | ✅ [Other clients](https://modelcontextprotocol.io/clients) |
+| **Windows** | ⚠️ WSL | ✅ Local | ✅ Local | ✅ Local | ✅ Local (streamable-http only) | ✅ [Other clients](https://modelcontextprotocol.io/clients) |
+| **Windows** | ⚠️ Remote Linux | ✅ Local | ✅ Local | ✅ Local | ✅ Local (streamable-http only) | ✅ [Other clients](https://modelcontextprotocol.io/clients) |
+
+> The KDB-X MCP server can connect to one KDB Service -  either KDB-X or KDB+, not both. \
+> The chosen KDB Service needs to be listening on a host and port that is accessible to the KDB-X MCP server.
+
+- **KDB-X**: Mac/Linux/WSL only (no native Windows support)
+- **KDB+**: Windows/Mac/Linux/WSL
+- **MCP Server**: UV required (Windows/Mac/Linux/WSL)
+- **Claude Desktop**: Windows/Mac only
+- **UV**: Required for running the MCP Server
+- **NPX**: Required for streamable-http transport with Claude Desktop
+- **Stdio transport**: Only works when Claude Desktop and MCP Server are on same OS
 
 ## Prerequisites
 
-Before installing and running the KDB-X MCP Server, ensure you have:
+Before installing and running the KDB-X MCP Server, ensure you have met the following requirements:
 
-- A `KDB-X` service listening on a host and port that will be accessible to the MCP Server - see [example](https://docs.kx.com/public-preview/kdb-x/How_to/use-the-q-terminal.htm#use-command-line-options)
+- [Cloned this repo](#clone-the-repository)
+- A `KDB-X/KDB+` Service listening on a host and port that will be accessible to the MCP Server
+  - See examples - [KDB-X Setup](#kdb-x-setup) / [KDB+ Setup](#kdb-setup)
   - KDB-X can be installed by signing up to the [kdb-x public preview](https://kdb-x.kx.com/sign-in) - see [KDB-X documentation](https://docs.kx.com/public-preview/kdb-x/home.htm) for supporting information
-  - KDB-X is supported on Linux/WSL/Mac
-  - Windows users can run the KDB-X MCP Server on Windows and connect to a local/remote KDB-X database
-  - Windows users can run a local KDB-X database by installing KDB-X on [WSL](https://learn.microsoft.com/en-us/windows/wsl/install), and use the default [streamable-http transport](#transport-options) when running the [KDB-X MCP Server](#run-the-server)
-- [UV Installed](https://docs.astral.sh/uv/getting-started/installation/)
-- [Claude Desktop](https://claude.ai/download) or another MCP-compatible client installed
+  - Windows users can run the KDB-X MCP Server on Windows and connect to a local KDB-X database via WSL or remote KDB-X database running on Linux
+  - Windows users can run a local KDB-X database by installing KDB-X on [WSL](https://learn.microsoft.com/en-us/windows/wsl/install), and use the default [streamable-http transport](#transport-options) when running the [KDB-X MCP Server](#run-the-server) - both share the same localhost network.
+  - For details on KDB-X usage restrictions see [documentation](https://docs.kx.com/product/licensing/usage-restrictions.htm#kdb-x-personal-trial-download)
+- [UV Installed](https://docs.astral.sh/uv/getting-started/installation/) for running the KDB-X MCP Server - available on Windows/Mac/Linux/WSL
+- [Claude Desktop](https://claude.ai/download) or another MCP-compatible client installed, that will connect the the KDB-X MCP Server - available on Windows/Mac
 - [NPX](https://nodejs.org/en) is required to use `streamable-http` transport with Claude Desktop
-  - If you are using a different MCP Client then `npx` may not be required - consult the documentation of your chosen MCP Client
-  - `npx` comes bundled with the [nodejs](https://nodejs.org/en) installer
+  - `npx` may not be required if you are using a different MCP Client - consult the documentation of your chosen MCP Client
+  - `npx` comes bundled with the [nodejs](https://nodejs.org/en) installer - available on Windows/Mac/Linux/WSL
   - See [example configuration with streamable-http](#example-configuration-with-streamable-http)
 
-> Note: For details on KDB-X usage restrictions see [documentation](https://docs.kx.com/product/licensing/usage-restrictions.htm#kdb-x-personal-trial-download)
+## Quickstart
+
+To demonstrate basic usage of the KDB-X MCP Server, using an empty KDB-X database, follow the quickstart steps below.
+
+> Note: Ensure you have followed the necessary [prerequisites steps](#prerequisites)
+
+1. Open a KDB-X service listening on a port.
+
+   By default the KDB-X MCP server will connect to KDB-X service on port 5000 - [but this can be changed](#command-line-parameters) via command line flags or environment variables.
+
+   > Note: KDB-X is currently not supported on Windows - if you are using Windows we recommend running KDB-X on WSL as outlined in the [prerequisites steps](#prerequisites)
+
+   ```bash
+   q -p 5000
+   ```
+
+2. Load the sql interface.
+
+   ```q
+   .s.init[]
+   ```
+
+3. Add a dummy table e.g. `trade`.
+
+   ```q
+   rows:10000;
+   trade:([]time:.z.d+asc rows?.z.t;sym:rows?`AAPL`GOOG`MSFT`TSLA`AMZN;price:rows?100f;size:rows?1000);
+   ```
+
+4. [Configure Claude Desktop](#configure-claude-desktop) with your chosen transport.
+
+5. [Start your MCP server](#mcp-server-installation).
+
+   If you have configured Claude Desktop with [stdio transport](#example-configuration-with-stdio), then this step is not required. Please move directly to step 6 (Claude Desktop will manage starting the MCP Server for you).
+
+   ```bash
+   uv run mcp-server
+   ```
+
+6. Start Claude Desktop and verify that the tools and prompts outlined in the [Validate Claude Desktop Config](#validate-claude-desktop-config) section are visible.
+
+7. **Load database context**: Select the `kdbx_describe_tables` and `kdbx_sql_query_guidance` [resources](#resources) to add them to your conversation. This will give your MCP client an overview of your database structure and available tables, along with guidance on writing effective SQL queries.
+
+8. **Explore specific tables**: Use the `kdbx_table_analysis` [prompt](#prompts) to get detailed analysis and insights about individual tables in your database.
+
+9. **Ask questions in natural language**: Interact with your KDB-X database using plain English. Your MCP client will automatically use the `kdbx_run_sql_query` [tool](#tools) to execute the appropriate queries based on your requests.
 
 ## Features
 
@@ -53,15 +126,45 @@ Before installing and running the KDB-X MCP Server, ensure you have:
 
 ## KDB-X Setup
 
+The KDB-X MCP server connects to the KDB-X service on a designated host and port.
+
+To start the KDB-X service and make it accessible locally you can run:
+
+```bash
+q -p 5000
+```
+
 The KDB-X MCP server communicates with the KDB-X service using its SQL interface.
 
-Ensure that the SQL interface is loaded on the KDB-X service — if it's not, you can load it manually by running:
+Load the SQL interface:
 
 ```q
 .s.init[]
 ```
 
+## KDB+ Setup
+
+The KDB-X MCP server connects to the KDB+ service on a designated host and port.
+
+To start the KDB+ service and make it accessible locally you can run:
+
+```bash
+q -p 5000
+```
+
+The KDB-X MCP server communicates with the KDB+ service using its SQL interface.
+
+When using KDB+, an [s.k_](https://code.kx.com/insights/1.14/core/sql.html#sql-language-support) file must be present in your `QHOME` - This file comes bundled with insights core
+
+Load the SQL interface:
+
+```q
+\l s.k_
+```
+
 ## MCP Server Installation
+
+The MCP Server can be installed on Windows, Mac, Linux and [WSL](https://learn.microsoft.com/en-us/windows/wsl/install)
 
 ### Clone the repository
 
@@ -72,10 +175,20 @@ cd kdb-x-mcp-server
 
 ### Run the server
 
-The server will start with `streamable-http` transport by default
+The server will start with `streamable-http` transport by default.
+
+For Windows users with WSL installed -  when using `streamable-http` transport, the MCP Server can run on either Windows or WSL. For both scenarios, the MCP Server will be available on the same shared localhost network. Claude Desktop (running on Windows) will connect over `localhost`. So this repository can be cloned to either Windows or WSL. `uv` needs be installed on the same OS where the MCP Server will be running.
+
+If you are using `stdio` on Windows, Claude Desktop will manage starting and stopping the MCP server. So this repository will need to be cloned to the Windows filesystem. `uv` will need be installed on Windows.
 
 ```bash
 uv run mcp-server
+```
+
+If you see pykx related `SyntaxWarnings` on startup, like the example below, you can safely ignore these.
+
+```bash
+SyntaxWarning: invalid escape sequence '\:'
 ```
 
 ## Transport Options
@@ -114,6 +227,8 @@ options:
                         KDB-X connection retry attempts (default: 2)
 ```
 
+> Note: `kdbx-*` command line flags can be used when pointing to a KDB+ Service
+
 **Environment Variables:**
 
 - `KDBX_MCP_TRANSPORT`: Set transport mode (streamable-http, stdio)
@@ -121,10 +236,14 @@ options:
 - `KDBX_MCP_HOST`: Set host address (default: 127.0.0.1)
 - `KDBX_MCP_SERVER_NAME`: Set server name (default: KDB-X_Demo)
 - `KDBX_LOG_LEVEL`: Set logging level (default: INFO)
+- `KDBX_RETRY`: KDB-X server connection retry count (default: 2)
+- `KDBX_TIMEOUT`: KDB-X server connection timeout in seconds (default: 2)
 - `KDBX_HOST`: KDB-X server hostname (default: localhost)
 - `KDBX_PORT`: KDB-X server port (default: 5000)
 - `KDBX_USERNAME`: KDB-X username (optional)
 - `KDBX_PASSWORD`: KDB-X password (optional)
+
+> Note: `KDBX_*` environment variables can be used when pointing to a KDB+ Service
 
 **Configuration Priority:**
 
@@ -238,39 +357,6 @@ For detailed setup instructions, see the [official Claude Desktop documentation]
 
    ![alt text](screenshots/claude_resources.png)
 
-## Quickstart
-
-To demonstrate basic usage of this tool, using an empty KDB-X database, follow the quickstart steps below.
-
-1. Open a KDB-X q session
-
-   ```bash
-   q -p 5000
-   ```
-
-2. Load the sql interface
-
-   ```q
-   .s.init[]
-   ```
-
-3. Add a dummy table e.g. `trade`
-
-   ```q
-   rows:10000;
-   trade:([]time:.z.d+asc rows?.z.t;sym:rows?`AAPL`GOOG`MSFT`TSLA`AMZN;price:rows?100f;size:rows?1000);
-   ```
-
-4. Start your MCP server - you may start it from this repo via `uv run mcp-server`, or in the case of `stdio` we will let Claude start it in the next step.
-
-5. Start Claude Desktop and verify that the tools and prompts outlined in the [Validate Claude Desktop Config](#validate-claude-desktop-config) section are visible.
-
-6. **Load database context**: Select the `kdbx_describe_tables` and `kdbx_sql_query_guidance` resources to add them to your conversation. This will give your MCP client an overview of your database structure and available tables, along with guidance on writing effective SQL queries.
-
-7. **Explore specific tables**: Use the `kdbx_table_analysis` prompt to get detailed analysis and insights about individual tables in your database.
-
-8. **Ask questions in natural language**: Interact with your KDB-X database using plain English. Your MCP client will automatically use the `kdbx_run_sql_query` tool to execute the appropriate queries based on your requests.
-
 ## Prompts/Resources/Tools
 
 ### Prompts
@@ -376,3 +462,9 @@ For detailed troubleshooting, see [official Claude MCP docs](https://modelcontex
 You may need to upgrade to a paid plan to avoid Claude usage errors like this:
 
 > Claude hit the maximum length for this conversation. Please start a new conversation to continue chatting with Claude.
+
+## Useful Resources
+
+- [KDB-X documentation](https://docs.kx.com/public-preview/kdb-x/home.htm) for more general information about KDB-X development
+- [KX Forum](https://forum.kx.com/) for community support
+- [KX Slack](http://kx.com/slack) for support & feedback

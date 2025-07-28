@@ -37,6 +37,14 @@ async def run_query_impl(sqlSelectQuery: str) -> Dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Query failed: {e}")
+        if ".s.e" in str(e):
+            logger.error(f"It looks like the SQL interface is not loaded. You can load it manually by running .s.init[]:")
+            return {
+                "status": "error",
+                "error_type": "sql_interface_not_loaded",
+                "message": "It looks like the SQL interface is not loaded in the KDB-X database. Please initialize it by running `.s.init[]` in your KDB-X session, or contact your system administrator.",
+                "technical_details": str(e)
+            }
         return {"status": "error", "message": str(e)}
 
 
