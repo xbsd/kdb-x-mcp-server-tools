@@ -6,7 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "mcp[cli]>=1.2.0",
-    "pykx==4.0.0.b1",
+    "pykx>=4.0.0.b2",
     "pydantic-settings",
 ]
 
