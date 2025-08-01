@@ -19,6 +19,7 @@ The server leverages a combination of curated resources, intelligent prompts, an
 - [Usage with Claude Desktop](#usage-with-claude-desktop)
 - [Prompts/Resources/Tools](#promptsresourcestools)
 - [Development](#development)
+- [Testing](#testing)
 - [Troubleshooting](#troubleshooting)
 - [Useful Resources](#useful-resources)
 
@@ -183,12 +184,6 @@ If you are using `stdio` on Windows, Claude Desktop will manage starting and sto
 
 ```bash
 uv run mcp-server
-```
-
-If you see pykx related `SyntaxWarnings` on startup, like the example below, you can safely ignore these.
-
-```bash
-SyntaxWarning: invalid escape sequence '\:'
 ```
 
 ## Transport Options
@@ -357,6 +352,20 @@ For detailed setup instructions, see the [official Claude Desktop documentation]
 
    ![alt text](screenshots/claude_resources.png)
 
+
+### Enable Claude Desktop Developer Mode
+
+Developer mode can be enabled to give quick access to:
+
+- MCP Server Reloads - No need to quit Claude Desktop for every MCP Server restart
+- MCP Configuration - Shortcut to your `claude_desktop_config.json`
+- MCP Logs - Shortcut to Claude Desktop MCP logs - when using transport `streamable-http` you will also need to review the KDB-X MCP logs from your terminal
+
+To enable Developer mode:
+
+- Start Claude Desktop, click the menu in the upper-left corner > `Help` > `Troubleshooting` > `Enable Developer Mode` (Confirm any popups)
+- Restart Claude Desktop, click the menu in the upper-left corner > `Developer` > Developer settings should now be populated
+
 ## Prompts/Resources/Tools
 
 ### Prompts
@@ -401,6 +410,13 @@ To add new prompts:
 3. The prompt will be auto-discovered and registered when the server starts.
 4. Restart Claude Desktop to access your new prompt.
 
+## Testing
+
+The below tools can aid in the development, testing and debugging of new MCP tools, resource and prompts.
+
+- [MCP Inspector](https://modelcontextprotocol.io/legacy/tools/inspector) is a interactive developer tool from Anthropic
+- [Postman](https://learning.postman.com/docs/postman-ai-agent-builder/mcp-requests/create/) to create MCP requests and store in collections
+
 ## Troubleshooting
 
 ### KDB-X connection error
@@ -413,7 +429,7 @@ The default KDB-X endpoint is `localhost:5000`, but you can update as needed via
 
 The KDB-X MCP server communicates with the KDB-X service using its SQL interface.
 
-Ensure that the SQL interface is loaded on the KDB-X service — if it's not, you can load it manually by running:
+If you get an error saying the SQL interface is not loaded. You can load it manually by running .s.init[]
 
 ```q
 .s.init[]
@@ -431,7 +447,7 @@ You can only specify `streamable-http`, `stdio.`
 
 Review the Server logs for registration errors.
 
-### Error when interacting with a KDB-X database
+### Errors when interacting with a KDB-X database
 
 Ensure the KDB-X resources are loaded, so Claude knows how to interact with the database.
 
