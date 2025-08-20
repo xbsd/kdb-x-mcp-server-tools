@@ -7,8 +7,24 @@ from mcp_server.server import config
 
 logger = logging.getLogger(__name__)
 
+def get_kdb_connection() -> kx.QConnection:
+    try:
+        conn = kdb_sync_connection(config.kdbx_config)
+        conn('') # check if conn is live for existing connection from cache
+        return conn
+    except Exception as e:
+        if "Attempted to use a closed IPC connection" in str(e):
+            logger.warning("KDB-X connection was closed. Reinitializing...")
+            cleanup_kdb_connection()
+            conn = kdb_sync_connection(config.kdbx_config)
+            conn('')
+            return conn
+        else:
+            logger.error(f"Error in creating KDBX connection: {e}")
+            raise
+
 @lru_cache()
-def get_kdb_connection(config: Optional[KDBConfig] = None) -> kx.QConnection:
+def kdb_sync_connection(config: Optional[KDBConfig] = None) -> kx.QConnection:
     if config is None:
         config = default_kdb_config
 
@@ -34,21 +50,6 @@ def get_kdb_connection(config: Optional[KDBConfig] = None) -> kx.QConnection:
     logger.error(f"Failed to connect to KDB")
     raise
 
-def run_kdbx_sql_query(query:str, max_rows:int) -> any:
-    try:
-        conn = get_kdb_connection(config.kdbx_config)
-        result = conn('{r:.s.e x;`rowCount`data!(count r;y sublist r)}', kx.CharVector(query), max_rows)
-        return result
-    except Exception as e:
-        if "Attempted to use a closed IPC connection" in str(e):
-            logger.warning("KDB-X connection was closed. Reinitializing...")
-            cleanup_kdb_connection()
-            conn = get_kdb_connection(config.kdbx_config)
-            return conn('{r:.s.e x;`rowCount`data!(count r;y sublist r)}', kx.CharVector(query), max_rows)
-        else:
-            logger.error(f"Error running KDB query: {e}")
-            raise
-
 def cleanup_kdb_connection():
-    get_kdb_connection.cache_clear()
-    logger.info("KDB connection cache cleared")
+    kdb_sync_connection.cache_clear()
+    logger.info("KDBX connection cache cleared")

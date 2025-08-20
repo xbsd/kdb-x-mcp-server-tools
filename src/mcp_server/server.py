@@ -215,9 +215,7 @@ def parse_args():
 
 
 def main():
-
     args = parse_args()
-
      # Determine transport mode (only set if CLI flag is provided)
     args.kdbx_mcp_transport = None
     if args.streamable_http:
@@ -238,6 +236,3 @@ def main():
 
     server = McpServer(config)
     server.run()
-
-if __name__ == "__main__":
-    main()

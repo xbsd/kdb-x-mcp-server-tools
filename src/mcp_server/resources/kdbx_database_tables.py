@@ -19,7 +19,7 @@ async def kdbx_describe_table_impl(table: str) -> List[TextContent]:
         List[TextContent]: Table description with metadata and sample data
     """
     try:
-        conn = get_kdb_connection(config.kdbx_config)
+        conn = get_kdb_connection()
 
         total_records = conn('{count get x}', table).py()
 
@@ -62,7 +62,7 @@ async def kdbx_describe_table_impl(table: str) -> List[TextContent]:
 
 async def kdbx_describe_tables_impl() -> List[TextContent]:
     try:
-        conn = get_kdb_connection(config.kdbx_config)
+        conn = get_kdb_connection()
 
         available_tables = conn.tables(None).py()
 
