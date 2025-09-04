@@ -16,6 +16,7 @@ The server leverages a combination of curated resources, intelligent prompts, an
 - [MCP Server Installation](#mcp-server-installation)
 - [Transport Options](#transport-options)
 - [Command line Parameters](#command-line-parameters)
+- [Configure Embeddings](#configure-embeddings)
 - [Usage with Claude Desktop](#usage-with-claude-desktop)
 - [Prompts/Resources/Tools](#promptsresourcestools)
 - [Development](#development)
@@ -54,7 +55,7 @@ Before installing and running the KDB-X MCP Server, ensure you have met the foll
 - [Cloned this repo](#clone-the-repository)
 - A `KDB-X/KDB+` Service listening on a host and port that will be accessible to the MCP Server
   - See examples - [KDB-X Setup](#kdb-x-setup) / [KDB+ Setup](#kdb-setup)
-  - KDB-X can be installed by signing up to the [kdb-x public preview](https://kdb-x.kx.com/sign-in) - see [KDB-X documentation](https://docs.kx.com/public-preview/kdb-x/home.htm) for supporting information
+  - KDB-X can be installed by signing up to the [KDB-X public preview](https://kdb-x.kx.com/sign-in) - see [KDB-X documentation](https://docs.kx.com/public-preview/kdb-x/home.htm) for supporting information
   - Windows users can run the KDB-X MCP Server on Windows and connect to a local KDB-X database via WSL or remote KDB-X database running on Linux
   - Windows users can run a local KDB-X database by installing KDB-X on [WSL](https://learn.microsoft.com/en-us/windows/wsl/install), and use the default [streamable-http transport](#transport-options) when running the [KDB-X MCP Server](#run-the-server) - both share the same localhost network.
   - For details on KDB-X usage restrictions see [documentation](https://docs.kx.com/product/licensing/usage-restrictions.htm#kdb-x-personal-trial-download)
@@ -246,6 +247,22 @@ options:
 2. **Environment variables** (middle precedence) - `KDBX_MCP_TRANSPORT=streamable-http`, `KDBX_HOST=myhost`
 3. **Default values** (lowest precedence)
 
+## Configure Embeddings
+
+Before starting the KDB-X MCP Server, you must configure embedding models for your tables if you wish to use Similarity Search.
+The repository includes two ready-to-use embedding providers: OpenAI and SentenceTransformers.
+You can customize these implementations as needed, or add your own provider by following the steps outlined below.
+
+1. Update Dependencies - Add your required embedding providers to `pyproject.toml` dependencies section.
+
+2. Set Environment Variables - Configure required API keys for your chosen embedding providers if necessary (for example, set the environment variable `OPENAI_API_KEY` to use OpenAI's API)
+
+3. Add New Provider - The file `src/mcp_server/utils/embeddings.py` defines the base class `EmbeddingProvider` for all embedding providers.
+   To add a new provider, create a class in the same file that extends this base class and implements all required abstract methods.
+   You can use the existing implementations of OpenAI and SentenceTransformers in the same file as templates — simply copy and modify them to suit your needs. To register your provider, use the `@register_provider` decorator above your class definition. It is not compulsory for the registered provider name to follow the provider's Python package name.
+
+4. Configure Table Embeddings - Update the embeddings configuration file at `src/mcp_server/utils/embeddings.csv` with your actual database and table names, embedding providers and models. The name you provide at `embeddings.csv` should match the registered provider name specified in file `embeddings.py`.
+
 ## Usage with Claude Desktop
 
 ### Configure Claude Desktop
@@ -302,7 +319,8 @@ If you have pre-existing MCP servers see [example config with multiple mcp-serve
         "--directory",
         "/path/to/this/repo/",
         "run",
-        "mcp_server"
+        "mcp-server",
+        "--stdio"
       ]
     }
   }
@@ -311,7 +329,7 @@ If you have pre-existing MCP servers see [example config with multiple mcp-serve
 
 **Note**
 
-- Update your `<user>` to point to the absolute path of the uv executable - only required if `uv` is on your path
+- Update your `<user>` to point to the absolute path of the uv executable - only required if `uv` is not on your path
 - Update the `--directory` path to the absolute path of this repo
 - Currently `KDB-X` does not support Windows, meaning `stdio` is not an option for Windows users
 - Claude Desktop is responsible for starting/stopping the MCP server when using `stdio`
@@ -372,7 +390,7 @@ To enable Developer mode:
 
 | Name | Purpose | Params | Return |
 |-------------------|------------------------------------------|-------------------------------------------------|------------------------------------------------|
-| kdbx_table_analysis | Generate a detailed analysis prompt for a specific table. | table_name: Name of the table to analyze<br> analysis_type (optional): Type of analysis options statistical, data_quality<br> sample_size (optional): Suggested sample size for data exploration | The generated table analysis prompt |
+| kdbx_table_analysis | Generate a detailed analysis prompt for a specific table. | `table_name`: Name of the table to analyze<br> `analysis_type` (optional): Type of analysis options statistical, data_quality<br> `sample_size` (optional): Suggested sample size for data exploration | The generated table analysis prompt |
 
 ### Resources
 
@@ -385,7 +403,8 @@ To enable Developer mode:
 
 | Name | Purpose | Params | Return |
 |-------------------|------------------------------------------|-------------------------------------------------|------------------------------------------------|
-| kdbx_run_sql_query | Execute SQL SELECT against KDB-X database | query (str): SQL SELECT query string to execute | JSON object with query results (max 1000 rows) |
+| kdbx_run_sql_query | Execute SQL SELECT against KDB-X database | `query`: SQL SELECT query string to execute | JSON object with query results (max 1000 rows) |
+| kdbx_similarity_search | Perform vector similarity search on a KDB-X table | `table_name`: Name of the table to search <br> `query`: Text query to convert to vector and search <br> `n` (optional): Number of results to return | Dictionary containing search result |
 
 ## Development
 
@@ -441,7 +460,7 @@ If the MCP Server port is being used by another process you will need to specify
 
 ### Invalid transport
 
-You can only specify `streamable-http`, `stdio.`
+You can only specify `streamable-http` or `stdio.`
 
 ### Missing tools/resources
 

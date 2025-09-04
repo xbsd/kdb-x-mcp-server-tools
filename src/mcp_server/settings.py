@@ -10,6 +10,11 @@ class KDBConfig(BaseSettings):
     password: Optional[SecretStr] = ""
     timeout: Optional[int] = 1
     retry: Optional[int] = 2
+    
+    # Similarity Search tool
+    embedding_csv_path: str = "src/mcp_server/utils/embeddings.csv"
+    metric: str = "CS"
+    k: int = 5
 
     class Config:
         env_prefix = 'KDBX_'

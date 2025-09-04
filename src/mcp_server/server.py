@@ -111,6 +111,9 @@ class McpServer:
             if not conn('@[{2< count .s};(::);{0b}]').py():
                 self.logger.error("KDB-X SQL interface check: FAILED - KDB-X service does not have the SQL interface loaded. Load it by running .s.init[] in your KDB-X Session")
                 sys.exit(1)
+            if not conn('@[{2< count .ai};(::);{0b}]').py():
+                self.logger.error("KDB-X AI Libs check: FAILED - KDB-X service does not have the AI Libs loaded. Load it by running \l ai-libs/init.q in your KDB-X Session")
+                sys.exit(1)
             else:
                 self.logger.info("KDB-X SQL interface check: SUCCESS - SQL interface is loaded")
             conn.close()
