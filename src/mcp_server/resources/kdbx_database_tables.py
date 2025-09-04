@@ -3,6 +3,7 @@ import logging
 from typing import List
 from mcp.types import TextContent
 from mcp_server.utils.kdbx import get_kdb_connection
+from mcp_server.utils.embeddings_helpers import get_embedding_config
 from mcp_server.server import config
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ async def kdbx_describe_table_impl(table: str) -> List[TextContent]:
 
             output_lines.extend([
                 f"\n Data Preview ({preview_size} records):",
-                _format_data(preview_data)
+                _format_data(preview_data, table)
             ])
         else:
             output_lines.append("\n Table is empty - no data to preview")
@@ -94,7 +95,12 @@ async def kdbx_describe_tables_impl() -> List[TextContent]:
         )]
 
 
-def _format_data(data) -> str:
+def _format_data(data, table=None) -> str:
+    if table:
+        embeddings_column, _, _, _, _ = get_embedding_config(table)
+        if embeddings_column and hasattr(data, "pop"):
+            data.pop(embeddings_column, None)
+            # data = data.drop(embeddings_column, axis=1, errors="ignore")
     if hasattr(data, 'to_string'):
         return data.to_string()
     return str(data)
