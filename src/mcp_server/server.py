@@ -1,77 +1,44 @@
-
 import os
 import sys
 import logging
-import argparse
 import socket
-from typing import Optional
-
-import pykx as kx
-from pykx.exceptions import QError
+from packaging import version
 from mcp.server.fastmcp import FastMCP
 from mcp_server.utils.logging import setup_logging
-from mcp_server.settings import ServerConfig, KDBConfig
+from mcp_server.settings import AppSettings
+from mcp_server.tools import register_tools
+from mcp_server.prompts import register_prompts
+from mcp_server.resources import register_resources
 
-try:
-    from tools import register_tools
-    from prompts import register_prompts
-    from resources import register_resources
-except ImportError:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, current_dir)
-    from tools import register_tools
-    from prompts import register_prompts
-    from resources import register_resources
+# Ensure pykx throws error on import if license is not valid
+os.environ["PYKX_LICENSED"] = "true"
 
-class MCPServerConfig:
+# Global flag to track AI Libs availability
+_ai_libs_available = False
 
-    def __init__(self, kdbx_mcp_transport=None, kdbx_mcp_port=None, kdbx_host=None, kdbx_port=None, kdbx_timeout=None, kdbx_retry=None):
+def set_ai_libs_available(available: bool):
+    global _ai_libs_available
+    _ai_libs_available = available
 
-        self.logger = logging.getLogger(__name__)
-
-        # Validate MCP configuration with CLI overrides
-        mcp_kwargs = {}
-        if kdbx_mcp_transport is not None:
-            mcp_kwargs['transport'] = kdbx_mcp_transport
-        if kdbx_mcp_port is not None:
-            mcp_kwargs['port'] = kdbx_mcp_port
-        self.settings = ServerConfig(**mcp_kwargs)
-
-        # Validate KDB configuration with CLI overrides
-        kdbx_kwargs = {}
-        if kdbx_host is not None:
-            kdbx_kwargs['host'] = kdbx_host
-        if kdbx_port is not None:
-            kdbx_kwargs['port'] = kdbx_port
-        if kdbx_timeout is not None:
-            kdbx_kwargs['timeout'] = kdbx_timeout
-        if kdbx_retry is not None:
-            kdbx_kwargs['retry'] = kdbx_retry
-        self.kdbx_config = KDBConfig(**kdbx_kwargs)
-
-        self.server_name = self.settings.server_name
-        self.log_level = self.settings.log_level
-        self.port = self.settings.port
-        self.host = self.settings.host
-        self.transport = self.settings.transport
+def is_ai_libs_available() -> bool:
+    return _ai_libs_available
 
 class McpServer:
 
-    def __init__(self, config: Optional[MCPServerConfig] = None):
-        self.config = config or MCPServerConfig()
+    def __init__(self, config: AppSettings):
         self.logger = logging.getLogger(__name__)
 
-        self.kdbx_config = self.config.kdbx_config
-        self.logger.info(f"KDBConfig: {self.kdbx_config=}")
+        self.db_config = config.db
+        self.logger.info(f"KDBConfig: {self.db_config=}")
 
-        self.server_config = self.config.settings
-        self.logger.info(f"ServerConfig: {self.server_config=}")
+        self.mcp_config = config.mcp
+        self.logger.info(f"ServerConfig: {self.mcp_config=}")
 
         # Initialize server
         self.mcp = FastMCP(
-            self.config.server_name,
-            port=self.config.port,
-            host=self.config.host
+            self.mcp_config.server_name,
+            port=self.mcp_config.port,
+            host=self.mcp_config.host
         )
 
         self._check_port_availability()
@@ -79,57 +46,94 @@ class McpServer:
         self._register_tools()
         self._register_prompts()
         self._register_resources()
+        if is_ai_libs_available():
+            self._preload_embedding_models()
 
     def _check_port_availability(self):
         """Check if the configured mcp-port is available for HTTP transports."""
-        if self.config.transport in ['streamable-http']:
+        if self.mcp_config.transport in ["streamable-http"]:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                    sock.bind((self.config.host, self.config.port))
-                self.logger.info(f"KDB-X MCP port availability check: SUCCESS - {self.config.host}:{self.config.port} is available")
+                    sock.bind((self.mcp_config.host, self.mcp_config.port))
+                self.logger.info(
+                    f"KDB-X MCP port availability check: SUCCESS - {self.mcp_config.host}:{self.mcp_config.port} is available"
+                )
             except OSError:
-                self.logger.error(f"KDB-X MCP port {self.config.port} is already in use on {self.config.host}")
+                self.logger.error(f"KDB-X MCP port {self.mcp_config.port} is already in use on {self.mcp_config.host}")
                 self.logger.error("Solutions:")
-                self.logger.error(f"  - Try a different port: --kdbx-mcp-port {self.config.port + 1}")
-                self.logger.error(f"  - Stop the service using port {self.config.port}")
+                self.logger.error(f"  - Try a different port: --mcp.port {self.mcp_config.port + 1}")
+                self.logger.error(f"  - Stop the service using port {self.mcp_config.port}")
                 sys.exit(1)
 
     def _check_kdb_connection(self):
         """Check if KDB-X service is reachable and accessible."""
         try:
+            import pykx as kx
+            from pykx.exceptions import QError
+        except Exception as e:
+            self.logger.error(f"Failed to import pykx: {e}")
+            self.logger.error("KDB-X Python is required to connect to KDB-X. Please ensure you have a valid license.")
+            self.logger.error("Set the QLIC environment variable to point to your license directory.")
+            sys.exit(1)
+
+        try:
             conn = kx.SyncQConnection(
-                host=self.kdbx_config.host,
-                port=self.kdbx_config.port,
-                username=self.kdbx_config.username,
-                password=self.kdbx_config.password.get_secret_value(),
-                timeout=5
+                host=self.db_config.host,
+                port=self.db_config.port,
+                username=self.db_config.username,
+                password=self.db_config.password.get_secret_value(),
+                timeout=self.db_config.timeout,
+                tls=self.db_config.tls,
+
             )
-            self.logger.info(f"KDB-X connectivity check: SUCCESS - {self.kdbx_config.host}:{self.kdbx_config.port} is accessible")
+            # Try to get kdbx version first, fall back to kdb+ version
+            try:
+                kdb_version = conn('.z.v`version').py().decode('utf-8')
+                kdb_type = "KDB-X"
+            except (QError, AttributeError):
+                kdb_version = str(conn('.z.K').py())
+                kdb_type = "KDB+"
+
+            self.logger.info(f"KDB-X connectivity check with 'tls={self.db_config.tls}': SUCCESS - {self.db_config.host}:{self.db_config.port} is accessible. You are running {kdb_type} version: {kdb_version}")
 
             # check if sql interface is loaded on KDB-X service
             if not conn('@[{2< count .s};(::);{0b}]').py():
                 self.logger.error("KDB-X SQL interface check: FAILED - KDB-X service does not have the SQL interface loaded. Load it by running .s.init[] in your KDB-X Session")
                 sys.exit(1)
-            if not conn('@[{2< count .ai};(::);{0b}]').py():
-                self.logger.error("KDB-X AI Libs check: FAILED - KDB-X service does not have the AI Libs loaded. Load it by running \l ai-libs/init.q in your KDB-X Session")
-                sys.exit(1)
             else:
                 self.logger.info("KDB-X SQL interface check: SUCCESS - SQL interface is loaded")
+
+            # check if AI libs are loaded on KDB-X service
+            ai_libs_available = conn('@[{2< count .ai};(::);{0b}]').py()
+            if not ai_libs_available:
+
+                # check if KDB-X version supports loading AI libs as a module
+                if kdb_type == "KDB-X" and version.parse(kdb_version) < version.parse("0.1.2"):
+                    self.logger.warning("KDB-X AI Libs check: NOT AVAILABLE - AI-powered tools (similarity_search, hybrid_search) will be disabled.")
+                    self.logger.warning(f"To use AI tools, you need at least KDB-X version '0.1.2'. Your version is '{kdb_version}'. Please update to the latest KDB-X version.")
+                elif kdb_type == "KDB+":
+                    self.logger.warning("KDB-X AI Libs check: NOT AVAILABLE - AI-powered tools (similarity_search, hybrid_search) are only available in KDB-X.")
+                else:
+                    self.logger.warning("KDB-X AI Libs check: NOT LOADED - AI-powered tools (similarity_search, hybrid_search) will be disabled.")
+                    self.logger.warning(r"To enable AI tools, load the KDB-X AI libraries by running: .ai:use`kx.ai in your KDB-X Session and then restart the MCP server")
+            else:
+                self.logger.info("KDB-X AI Libs check: SUCCESS - AI Libs are loaded, AI tools will be available")
+
+            set_ai_libs_available(ai_libs_available)
             conn.close()
 
         except QError as e:
-            self.logger.error(f"KDB-X connectivity check: FAILED - {self.kdbx_config.host}:{self.kdbx_config.port} ({e})")
+            self.logger.error(f"KDB-X self.connectivity check with 'tls={self.db_config.tls}': FAILED - {self.db_config.host}:{self.db_config.port} ({e})")
 
             if "Connection refused" in str(e):
-                self.logger.error(f"Verify KDB-X service is running and accessible on {self.kdbx_config.host}:{self.kdbx_config.port}")
+                self.logger.error(f"Verify KDB-X service is running and accessible on {self.db_config.host}:{self.db_config.port}")
 
             if "invalid username/password" in str(e):
-                self.logger.error("Verify your KDBX_USERNAME and KDBX_PASSWORD are correct")
+                self.logger.error("Verify your KDBX_DB_USERNAME and KDBX_DB_PASSWORD are correct")
 
             self.logger.error("KDB-X MCP server cannot function without connection to a KDB-X database. Exiting...")
             sys.exit(1)
-
 
     def _register_tools(self):
         try:
@@ -167,11 +171,30 @@ class McpServer:
             self.logger.error(f"Failed to register resources: {e}")
             raise
 
+    def _preload_embedding_models(self):
+        """Preload embedding models to avoid first-request delays."""
+        try:
+            import asyncio
+            from mcp_server.utils.embeddings import preload_models_from_config
+
+            # Run the async preload function
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(preload_models_from_config(self.db_config.embedding_csv_path))
+                self.logger.info("Embedding models preloaded successfully")
+            finally:
+                loop.close()
+
+        except Exception as e:
+            self.logger.warning(f"Failed to preload embedding models: {e}")
+            self.logger.warning("Models will be loaded on first use, which may cause delays")
+
     def run(self):
         """Start the MCP server."""
         try:
-            self.logger.info(f"Starting {self.config.server_name} MCP Server with {self.config.transport} transport")
-            self.mcp.run(transport=self.config.transport)
+            self.logger.info(f"Starting {self.mcp_config.server_name} MCP Server with {self.mcp_config.transport} transport")
+            self.mcp.run(transport=self.mcp_config.transport)
         except KeyboardInterrupt:
             self.logger.info("Server shutdown requested")
         except Exception as e:
@@ -181,61 +204,14 @@ class McpServer:
             self.logger.info("Server stopped")
 
 
-config: MCPServerConfig | None = None
-
-def initialize_config(args):
-    global config
-    config = MCPServerConfig(kdbx_mcp_transport=args.kdbx_mcp_transport, kdbx_mcp_port=args.kdbx_mcp_port,
-                            kdbx_host=args.kdbx_host, kdbx_port=args.kdbx_port,
-                            kdbx_timeout=args.kdbx_timeout, kdbx_retry=args.kdbx_retry)
-
-def parse_args():
-    """Parse command line arguments for the MCP server."""
-    parser = argparse.ArgumentParser(description='KDB-X MCP Server')
-
-    # Transport mode flags (mutually exclusive)
-    transport_group = parser.add_mutually_exclusive_group()
-    transport_group.add_argument('--streamable-http', action='store_true',
-                                help='Start the KDB-X MCP server with streamable HTTP transport (default)')
-    transport_group.add_argument('--stdio', action='store_true',
-                                help='Start the KDB-X MCP server with stdio transport')
-
-    # Port configuration
-    parser.add_argument('--kdbx-mcp-port', type=int,
-                       help='Port number the KDB-X MCP server will listen on when using streamable-http transport (default 8000)')
-
-    # KDB configuration
-    parser.add_argument('--kdbx-host', type=str,
-                       help='KDB-X host that the MCP server will connect to (default: localhost)')
-    parser.add_argument('--kdbx-port', type=int,
-                       help='KDB-X port that the MCP server will connect to (default: 5000)')
-    parser.add_argument('--kdbx-timeout', type=int,
-                       help='KDB-X connection timeout in seconds (default: 1)')
-    parser.add_argument('--kdbx-retry', type=int,
-                       help='KDB-X connection retry attempts (default: 2)')
-
-    return parser.parse_args()
+app_settings = AppSettings()
 
 
 def main():
-    args = parse_args()
-     # Determine transport mode (only set if CLI flag is provided)
-    args.kdbx_mcp_transport = None
-    if args.streamable_http:
-        args.kdbx_mcp_transport = 'streamable-http'
-    elif args.stdio:
-        args.kdbx_mcp_transport = 'stdio'
-
-    # Create config with CLI overrides
-    initialize_config(args)
+    """Main entry point for the KDB-X MCP Server."""
 
     # Setup logging with configured level
-    setup_logging(config.log_level)
-    logger = logging.getLogger(__name__)
+    setup_logging(app_settings.mcp.log_level)
 
-    # Warn if port is specified with stdio transport
-    if config.transport == 'stdio' and args.kdbx_mcp_port:
-        logger.warning("--kdbx-mcp-port is ignored with --stdio transport")
-
-    server = McpServer(config)
+    server = McpServer(app_settings)
     server.run()
