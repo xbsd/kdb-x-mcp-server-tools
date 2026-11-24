@@ -14,6 +14,7 @@ from typing import Any, Dict, List, Optional
 import aiohttp
 import pandas as pd
 
+from ..utils.secrets import get_secret
 from .base import (
     DataProvider,
     DataProviderError,
@@ -27,7 +28,8 @@ logger = logging.getLogger(__name__)
 
 # AlphaVantage API Configuration
 ALPHAVANTAGE_BASE_URL = "https://www.alphavantage.co/query"
-DEFAULT_API_KEY = "MSJBKZQFTPOYB2PI"
+# The API key is read from $ALPHAVANTAGE_API_KEY or ~/.env (never hardcode it).
+ALPHAVANTAGE_API_KEY_ENV = "ALPHAVANTAGE_API_KEY"
 
 
 class RateLimiter:
@@ -127,7 +129,7 @@ class AlphaVantageProvider(DataProvider):
     """
 
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or DEFAULT_API_KEY
+        self.api_key = api_key or get_secret(ALPHAVANTAGE_API_KEY_ENV)
         self.base_url = ALPHAVANTAGE_BASE_URL
         self.rate_limiter = _rate_limiter
         self.cache = _response_cache

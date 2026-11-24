@@ -20,11 +20,14 @@ import aiohttp
 import pandas as pd
 import numpy as np
 
+from ...utils.secrets import get_secret
+
 logger = logging.getLogger(__name__)
 
 # Configuration
 ALPHAVANTAGE_BASE_URL = "https://www.alphavantage.co/query"
-ALPHAVANTAGE_API_KEY = "MSJBKZQFTPOYB2PI"
+# The API key is read from $ALPHAVANTAGE_API_KEY or ~/.env (never hardcode it).
+ALPHAVANTAGE_API_KEY_ENV = "ALPHAVANTAGE_API_KEY"
 RATE_LIMIT_CALLS = 75
 RATE_LIMIT_PERIOD = 60.0
 
@@ -120,7 +123,7 @@ async def fetch_alphavantage(
         if cached:
             return cached
 
-    params['apikey'] = ALPHAVANTAGE_API_KEY
+    params['apikey'] = get_secret(ALPHAVANTAGE_API_KEY_ENV)
     await _rate_limiter.acquire()
 
     async with aiohttp.ClientSession() as session:
